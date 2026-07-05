@@ -1,0 +1,38 @@
+name: Update Dharma Events
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"   # every 3 hours — plenty for a Telegram channel
+  workflow_dispatch: {}      # lets you also trigger it manually from GitHub's UI
+
+permissions:
+  contents: write            # allows the workflow to commit updated events.json back
+
+jobs:
+  update-events:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 anthropic
+
+      - name: Scrape Telegram channel
+        run: python scrape_telegram.py --channel Buddhism_Events --state state.json --out raw_posts.jsonl
+
+      - name: Extract structured events with Claude
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python extract_events.py --in raw_posts.jsonl --out events.jsonl
+
+      - name: Commit updated data
+        run: |
+          git config user.name "dharma-online-bot"
+          git config user.email "actions@github.com"
+          git add state.json raw_posts.jsonl events.jsonl
+          git diff --quiet --cached || git commit -m "Update events [automated]"
+          git push
