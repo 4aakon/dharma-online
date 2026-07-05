@@ -152,12 +152,40 @@ export default function DharmaOnline() {
     );
   }, [query, rest]);
 
-  const toggleNotify = (id, title) => {
-    setNotified((prev) => {
-      const next = { ...prev, [id]: !prev[id] };
-      setToast(next[id] ? `Reminder set — you'll be notified 30 min before "${title}"` : "Reminder removed");
-      return next;
-    });
+  // Real reminders: since sending true push notifications requires a backend
+  // scheduler (a later phase), this generates a real .ics calendar file the
+  // person's own phone/calendar app will alert them about — genuinely works today.
+  const addToCalendar = (event) => {
+    if (!event.startUTC) {
+      setToast("This event's exact time isn't confirmed yet — check the registration link for details.");
+      return;
+    }
+    const start = new Date(event.startUTC);
+    const end = new Date(start.getTime() + (event.durationMin || 60) * 60000);
+    const fmt = (d) => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      `UID:${event.id}@dharma-online`,
+      `DTSTAMP:${fmt(new Date())}`,
+      `DTSTART:${fmt(start)}`,
+      `DTEND:${fmt(end)}`,
+      `SUMMARY:${event.title}`,
+      `DESCRIPTION:${(event.rawDescription || "").replace(/\n/g, " ")} Link: ${event.link || ""}`,
+      "BEGIN:VALARM", "TRIGGER:-PT30M", "ACTION:DISPLAY", "DESCRIPTION:Reminder", "END:VALARM",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const blob = new Blob([ics], { type: "text/calendar" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${event.title.slice(0, 40).replace(/[^a-z0-9]+/gi, "-")}.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setNotified((prev) => ({ ...prev, [event.id]: true }));
+    setToast(`Added "${event.title}" to your calendar — you'll get a reminder 30 min before.`);
   };
 
   const toggleExpand = (id) => setExpanded((p) => ({ ...p, [id]: !p[id] }));
@@ -173,7 +201,7 @@ export default function DharmaOnline() {
             <h1 style={{ fontFamily: "'Fraunces', serif" }} className="text-2xl font-semibold tracking-tight text-[#F3EFE3]">
               Dharma Online
             </h1>
-            <p className="text-xs text-[#9A9CC4] mt-0.5">Live Buddhist teachings, wherever you are</p>
+            <p className="text-xs text-[#9A9CC4] mt-0.5">Live Buddhist teachings, shown in your local time</p>
           </div>
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#C9962C] to-[#8B4A6B] flex items-center justify-center text-lg">
             ☸
@@ -206,6 +234,9 @@ export default function DharmaOnline() {
             ))}
           </select>
         </div>
+        <p className="text-[10px] text-[#6B6D9E] mt-1.5 ml-1">
+          Auto-detected from your device — change it if you're checking times for elsewhere.
+        </p>
       </header>
 
       <main className="px-5 mt-5 space-y-8">
@@ -217,7 +248,7 @@ export default function DharmaOnline() {
               event={featured}
               tz={tz}
               notified={!!notified[featured.id]}
-              onNotify={() => toggleNotify(featured.id, featured.title)}
+              onNotify={() => addToCalendar(featured)}
               expanded={!!expanded[featured.id]}
               onExpand={() => toggleExpand(featured.id)}
             />
@@ -237,13 +268,21 @@ export default function DharmaOnline() {
                 event={e}
                 tz={tz}
                 notified={!!notified[e.id]}
-                onNotify={() => toggleNotify(e.id, e.title)}
+                onNotify={() => addToCalendar(e)}
                 expanded={!!expanded[e.id]}
                 onExpand={() => toggleExpand(e.id)}
               />
             ))}
           </div>
         </section>
+
+        <p className="text-center text-[11px] text-[#6B6D9E] pt-2">
+          Events sourced from the public{" "}
+          <a href="https://t.me/Buddhism_Events" target="_blank" rel="noopener noreferrer" className="text-[#8688B8] underline">
+            Dharma Events
+          </a>{" "}
+          Telegram channel, summarized with AI. Always confirm details on the registration link.
+        </p>
       </main>
 
       {/* Toast */}
