@@ -64,7 +64,12 @@ function normalizeEvent(raw, index) {
 
 function fmtInTZ(iso, tz) {
   const d = new Date(iso);
-  const dateStr = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short", month: "short", day: "numeric" }).format(d);
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const dateStr = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz, weekday: "short", month: "short", day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+  }).format(d);
   const timeStr = new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit" }).format(d);
   return { dateStr, timeStr };
 }
@@ -275,14 +280,6 @@ export default function DharmaOnline() {
             ))}
           </div>
         </section>
-
-        <p className="text-center text-[11px] text-[#6B6D9E] pt-2">
-          Events sourced from the public{" "}
-          <a href="https://t.me/Buddhism_Events" target="_blank" rel="noopener noreferrer" className="text-[#8688B8] underline">
-            Dharma Events
-          </a>{" "}
-          Telegram channel, summarized with AI. Always confirm details on the registration link.
-        </p>
       </main>
 
       {/* Toast */}
