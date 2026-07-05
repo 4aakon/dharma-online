@@ -35,4 +35,5 @@ jobs:
           git config user.email "actions@github.com"
           git add state.json raw_posts.jsonl events.jsonl
           git diff --quiet --cached || git commit -m "Update events [automated]"
+          git pull --rebase origin main
           git push
