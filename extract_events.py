@@ -42,6 +42,13 @@ def dedup_key(event: dict) -> str:
     return hashlib.sha1(raw.encode()).hexdigest()
 
 
+def is_online_event(event: dict) -> bool:
+    """Hard code-level filter, not just prompt instruction — belt and suspenders
+    since this app is online-only and false positives (in-person events shown
+    as if online) are worse than false negatives here."""
+    return event.get("is_online") in ("yes", "hybrid")
+
+
 def is_upcoming(event: dict) -> bool:
     """Strict: if we can't confirm it's upcoming, leave it out. Better to
     miss an ambiguous post than show stale/past events in the app."""
@@ -113,9 +120,12 @@ a blank one — that's what needs_review is for, not omission.
 
 Also: NEVER include an event whose date has clearly already passed relative to today's date given above.
 
-Also: NEVER include an event where is_online is "no" (in-person only) — this app is \
-online-only, so leave those out of the events array entirely (they still count toward \
-is_event if you want, but don't emit an event object for them)."""
+Also: is_online must be "yes" or "hybrid" for an event to be included at all. If a post never \
+mentions any online/livestream/Zoom option — even if it doesn't explicitly say "in-person only" — \
+treat that as is_online="no" and leave it out. Don't default ambiguous cases to "unknown" and \
+include them anyway; silence about an online option means assume there isn't one. Retreats, \
+pilgrimages, and in-person teaching tours especially tend to have no online component unless \
+explicitly stated — read carefully before including one."""
 
 EXTRACT_TOOL = {
     "name": "record_events",
@@ -208,7 +218,7 @@ def main():
                 except (json.JSONDecodeError, KeyError):
                     continue
 
-    kept, skipped_past, skipped_dupe = 0, 0, 0
+    kept, skipped_past, skipped_dupe, skipped_offline = 0, 0, 0, 0
 
     with open(args.infile, encoding="utf-8") as f, open(args.outfile, "a", encoding="utf-8") as out:
         for line in f:
@@ -216,8 +226,11 @@ def main():
             if not post["text"].strip() and not post.get("link_preview"):
                 continue  # nothing to extract from (media-only post)
 
-            events = extract_one(client, post)  # already excludes in-person-only events
+            events = extract_one(client, post)
             for e in events:
+                if not is_online_event(e):
+                    skipped_offline += 1
+                    continue
                 if not is_upcoming(e):
                     skipped_past += 1
                     continue
@@ -231,7 +244,7 @@ def main():
             print(f"{post['url']}: {len(events)} extracted")
 
     print(f"\nDone. Kept {kept} upcoming/online events. "
-          f"Skipped {skipped_past} past, {skipped_dupe} duplicates.")
+          f"Skipped {skipped_past} past, {skipped_offline} not-online, {skipped_dupe} duplicates.")
 
 
 if __name__ == "__main__":
