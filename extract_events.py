@@ -43,14 +43,16 @@ def dedup_key(event: dict) -> str:
 
 
 def is_upcoming(event: dict) -> bool:
+    """Strict: if we can't confirm it's upcoming, leave it out. Better to
+    miss an ambiguous post than show stale/past events in the app."""
     start_utc = event.get("start_utc")
     if not start_utc:
-        return True  # unknown date — keep it, needs_review will already be true
+        return False
     try:
         dt = datetime.fromisoformat(start_utc.replace("Z", "+00:00"))
         return dt >= datetime.now(timezone.utc)
     except ValueError:
-        return True
+        return False
 
 SYSTEM_PROMPT = f"""You extract Buddhist dharma event listings from raw Telegram posts for an \
 app called Dharma Online. Today's date is {datetime.now(timezone.utc).strftime('%Y-%m-%d')} (UTC).
@@ -100,6 +102,16 @@ A vague or unconverted timezone is fine to leave as needs_review=false as long a
 start_local_text captures what was written — the app can display the original text \
 verbatim if start_utc is null. Don't flag things just because you're not 100% sure; \
 only flag true blockers.
+
+IMPORTANT ON DATES: this app only shows upcoming events with a computed start_utc — if you leave \
+start_utc null, the event will be silently dropped, even if you filled in start_local_text. So: \
+whenever the post gives ANY specific date (even without a precise timezone), make your best-effort \
+guess at timezone_iana from context (country/city mentioned, language, teacher's usual location) and \
+compute start_utc anyway. Only leave start_utc null if the post truly gives no date at all, or only a \
+vague future reference ("coming soon", "stay tuned"). A best-effort UTC time is more useful here than \
+a blank one — that's what needs_review is for, not omission.
+
+Also: NEVER include an event whose date has clearly already passed relative to today's date given above.
 
 Also: NEVER include an event where is_online is "no" (in-person only) — this app is \
 online-only, so leave those out of the events array entirely (they still count toward \
