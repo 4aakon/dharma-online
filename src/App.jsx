@@ -108,11 +108,14 @@ export default function DharmaOnline() {
     fetch(EVENTS_URL)
       .then((res) => {
         if (!res.ok) throw new Error("fetch failed");
-        return res.json();
+        return res.text(); // events.jsonl is line-delimited JSON, not a single JSON document
       })
-      .then((raw) => {
-        // events.jsonl is one JSON object per line; events.json (array) also supported
-        const list = Array.isArray(raw) ? raw : raw.split("\n").filter(Boolean).map((l) => JSON.parse(l));
+      .then((text) => {
+        const list = text
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .map((line) => JSON.parse(line));
         const normalized = list
           .filter((e) => !e.needs_review) // don't show unverified events publicly
           .map(normalizeEvent);
